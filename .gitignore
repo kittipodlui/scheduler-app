@@ -52,3 +52,5 @@ check-db.cjs
 # local database/data files
 /database/data/
 /database/*.db
+# Keep local session SQL dump out of GitHub (retain the file on this machine)
+/src/database/auth_sessions.sql
