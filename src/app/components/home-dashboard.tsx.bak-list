@@ -1,0 +1,68 @@
+'use client';
+
+import Link from 'next/link';
+import AppNavigation from './app-navigation';
+import { useAnalyticsData } from './use-analytics-data';
+
+export default function HomeDashboard({ username }: { username: string }) {
+  const { data, error, isLoading } = useAnalyticsData();
+  const summary = data?.summary;
+
+  return (
+    <main className="app-shell overview-shell">
+      <AppNavigation activePage="home" username={username} />
+      <header className="page-header overview-header">
+        <div>
+          <p className="eyebrow">STUDY PLANNER</p>
+          <h1>Smart Schedule Planner</h1>
+        </div>
+        <Link className="overview-primary-link" href="/study-plan">+ เพิ่มตารางใหม่</Link>
+      </header>
+
+      {error && <p className="dashboard-error" role="alert">{error}</p>}
+      <section className="overview-metrics" aria-label="ภาพรวมการอ่าน">
+        <div className="overview-metric">
+          <span>กิจกรรมทั้งหมด</span>
+          <strong>{isLoading ? '—' : summary?.categoryCount ?? 0}</strong>
+        </div>
+        <div className="overview-metric">
+          <span>อ่านเสร็จ</span>
+          <strong>{isLoading ? '—' : summary?.completedHours ?? 0}<small> ชม.</small></strong>
+        </div>
+        <div className="overview-metric">
+          <span>ประสิทธิภาพ</span>
+          <strong>{isLoading ? '—' : summary?.completionPercent ?? 0}<small>%</small></strong>
+        </div>
+      </section>
+
+      <section className="overview-section" aria-labelledby="overview-categories-title">
+        <div className="section-heading">
+          <h2 id="overview-categories-title">แผนล่าสุด</h2>
+          <Link className="text-link" href="/analytics">ดู Analytics</Link>
+        </div>
+        {isLoading ? (
+          <p className="overview-empty">กำลังโหลดข้อมูล...</p>
+        ) : data?.categories.length ? (
+          <div className="overview-category-list">
+            {data.categories.map((category) => (
+              <div className="overview-category-row" key={category.categoryId}>
+                <div className="overview-category-name">
+                  <strong>{category.categoryName}</strong>
+                  <span>{category.subjects.length} รายการ</span>
+                </div>
+                <span>{category.plannedHours} ชม. ตามแผน</span>
+                <span>อ่านแล้ว {category.completedHours} ชม.</span>
+                <div className="overview-progress" aria-label={`ความคืบหน้า ${category.completionPercent}%`}>
+                  <span style={{ width: `${category.completionPercent}%` }} />
+                </div>
+                <strong className="overview-progress-value">{category.completionPercent}%</strong>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="overview-empty">ยังไม่มีแผนการอ่าน <Link href="/study-plan">สร้าง Study Plan แรก</Link></p>
+        )}
+      </section>
+    </main>
+  );
+}

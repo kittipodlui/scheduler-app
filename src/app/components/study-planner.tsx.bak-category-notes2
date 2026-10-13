@@ -1,0 +1,698 @@
+'use client';
+
+import { useCallback, useEffect, useState } from 'react';
+import type { CSSProperties, FormEvent } from 'react';
+import { PRIORITY_WEIGHT_LEVELS, type PriorityWeight, type SubjectPreference, type StudyItemKind } from '@/lib/subjects';
+import { getSessionTimeRange } from '@/lib/study-time';
+import { getNormalizedWeightPercentages } from '@/lib/weight-percentages';
+import AppNavigation from './app-navigation';
+
+type Session = {
+  id: number;
+  dayIndex: number;
+  sessionIndex: number;
+  subjectKey: string;
+  isCompleted: boolean;
+  futureNote: string;
+  lectureNotes: string;
+};
+
+type Schedule = {
+  id: number;
+  daysPerWeek: number;
+  sessionsPerDay: number;
+  startTime: string;
+  endTime: string;
+  createdAt: string;
+  sessions: Session[];
+};
+
+type StudyCategory = {
+  id: number;
+  name: string;
+  futureNote: string;
+  lectureNotes: string;
+};
+
+const dayNames = ['จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์', 'อาทิตย์'];
+
+export default function StudyPlanner({ username }: { username: string }) {
+  const [categories, setCategories] = useState<StudyCategory[]>([]);
+  const [categoryId, setCategoryId] = useState<number | null>(null);
+  const [categoryName, setCategoryName] = useState('');
+  const [futureNote, setFutureNote] = useState('');
+  const [lectureNotes, setLectureNotes] = useState('');
+  const [isSavingNotes, setIsSavingNotes] = useState(false);
+  const [openSessionNoteId, setOpenSessionNoteId] = useState<number | null>(null);
+  const [subjectNoteType, setSubjectNoteType] = useState<'future' | 'lecture'>('future');
+  const [subjectNoteDraft, setSubjectNoteDraft] = useState('');
+  const [isSavingSubjectNote, setIsSavingSubjectNote] = useState(false);
+  const [subjects, setSubjects] = useState<SubjectPreference[]>([]);
+  const [customItemLabel, setCustomItemLabel] = useState('');
+  const [daysPerWeek, setDaysPerWeek] = useState(5);
+  const [startTime, setStartTime] = useState('20:00');
+  const [schedule, setSchedule] = useState<Schedule | null>(null);
+  const [message, setMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  const loadCategory = useCallback(async (nextCategoryId: number, selectedCategory: StudyCategory) => {
+    setCategoryId(nextCategoryId);
+    setFutureNote(selectedCategory?.futureNote ?? '');
+    setLectureNotes(selectedCategory?.lectureNotes ?? '');
+    setIsLoading(true);
+    setSchedule(null);
+    try {
+      const response = await fetch(`/api/schedule?categoryId=${nextCategoryId}`);
+      if (response.status === 401) {
+        window.location.replace('/login');
+        return;
+      }
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'โหลดหมวดไม่สำเร็จ');
+      setSubjects(data.subjects);
+      setSchedule(data.schedule);
+      setDaysPerWeek(data.schedule?.daysPerWeek ?? 5);
+      setStartTime(data.schedule?.startTime ?? '20:00');
+      setMessage('');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'โหลดหมวดไม่สำเร็จ');
+      setSubjects([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/categories')
+      .then(async (response) => {
+        if (response.status === 401) {
+          window.location.replace('/login');
+          return;
+        }
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'โหลดหมวดไม่สำเร็จ');
+        setCategories(data.categories);
+        if (data.categories.length > 0) await loadCategory(data.categories[0].id, data.categories[0]);
+      })
+      .catch((error: unknown) => {
+        setMessage(error instanceof Error ? error.message : 'เชื่อมต่อฐานข้อมูลไม่สำเร็จ');
+      })
+      .finally(() => setIsLoading(false));
+  }, [loadCategory]);
+
+  async function addCategory(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const name = categoryName.trim();
+    if (!name) return;
+
+    setMessage('กำลังสร้างหมวด...');
+    try {
+      const response = await fetch('/api/categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      if (response.status === 401) {
+        window.location.replace('/login');
+        return;
+      }
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'สร้างหมวดไม่สำเร็จ');
+      setCategories((current) => [...current, data.category]);
+      setCategoryName('');
+      await loadCategory(data.category.id, data.category);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'สร้างหมวดไม่สำเร็จ');
+    }
+  }
+
+  async function deleteCategory() {
+    const selectedCategory = categories.find((category) => category.id === categoryId);
+    if (!selectedCategory) return;
+    const confirmed = window.confirm(
+      `ลบหมวด "${selectedCategory.name}" และตารางทั้งหมดในหมวดนี้หรือไม่?`,
+    );
+    if (!confirmed) return;
+
+    setMessage('กำลังลบหมวด...');
+    try {
+      const response = await fetch('/api/categories', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ categoryId: selectedCategory.id }),
+      });
+      if (response.status === 401) {
+        window.location.replace('/login');
+        return;
+      }
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'ลบหมวดไม่สำเร็จ');
+      setCategories(data.categories);
+      setCategoryId(null);
+      setSubjects([]);
+      setSchedule(null);
+      setFutureNote('');
+      setLectureNotes('');
+      setMessage('');
+      if (data.categories.length > 0) await loadCategory(data.categories[0].id, data.categories[0]);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'ลบหมวดไม่สำเร็จ');
+    }
+  }
+
+  async function saveCategoryNotes() {
+    if (categoryId === null) return;
+    setIsSavingNotes(true);
+    setMessage('กำลังบันทึกโน้ต...');
+    try {
+      const response = await fetch('/api/categories', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ categoryId, futureNote, lectureNotes }),
+      });
+      if (response.status === 401) {
+        window.location.replace('/login');
+        return;
+      }
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'บันทึกโน้ตไม่สำเร็จ');
+      setCategories((current) => current.map((category) =>
+        category.id === categoryId ? data.category : category,
+      ));
+      setMessage('บันทึกโน้ตแล้ว');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'บันทึกโน้ตไม่สำเร็จ');
+    } finally {
+      setIsSavingNotes(false);
+    }
+  }
+
+  function changeWeight(subjectKey: string, weight: PriorityWeight) {
+    setSubjects((current) => current.map((subject) =>
+      subject.key === subjectKey ? { ...subject, weight } : subject,
+    ));
+  }
+
+  function openSessionNote(session: Session, type: 'future' | 'lecture') {
+    setOpenSessionNoteId(session.id);
+    setSubjectNoteType(type);
+    setSubjectNoteDraft(type === 'future' ? session.futureNote : session.lectureNotes);
+  }
+
+  async function saveSessionNote(session: Session) {
+    if (categoryId === null) return;
+    setIsSavingSubjectNote(true);
+    setMessage('กำลังบันทึกโน้ตช่วงเรียน...');
+    const nextFutureNote = subjectNoteType === 'future' ? subjectNoteDraft : session.futureNote;
+    const nextLectureNotes = subjectNoteType === 'lecture' ? subjectNoteDraft : session.lectureNotes;
+    try {
+      const response = await fetch('/api/schedule', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'notes',
+          categoryId,
+          scheduleId: schedule?.id,
+          sessionId: session.id,
+          futureNote: nextFutureNote,
+          lectureNotes: nextLectureNotes,
+        }),
+      });
+      if (response.status === 401) {
+        window.location.replace('/login');
+        return;
+      }
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'บันทึกโน้ตช่วงเรียนไม่สำเร็จ');
+      setSchedule((current) => current && ({
+        ...current,
+        sessions: current.sessions.map((item) => item.id === session.id
+          ? { ...item, futureNote: nextFutureNote, lectureNotes: nextLectureNotes }
+          : item),
+      }));
+      setOpenSessionNoteId(null);
+      setMessage('บันทึกโน้ตช่วงเรียนแล้ว');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'บันทึกโน้ตช่วงเรียนไม่สำเร็จ');
+    } finally {
+      setIsSavingSubjectNote(false);
+    }
+  }
+
+  async function updateSubject(
+    item: { subjectKey: string } | { label: string; kind: StudyItemKind },
+    method: 'POST' | 'DELETE',
+  ) {
+    setMessage(method === 'DELETE' ? 'กำลังนำรายการออก...' : 'กำลังเพิ่มรายการ...');
+    try {
+      const response = await fetch('/api/subjects', {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...item, categoryId }),
+      });
+      if (response.status === 401) {
+        window.location.replace('/login');
+        return;
+      }
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'แก้ไขรายวิชาไม่สำเร็จ');
+      setSubjects(data.subjects);
+      if ('label' in item) setCustomItemLabel('');
+      setSchedule(null);
+      setMessage('');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'แก้ไขรายวิชาไม่สำเร็จ');
+    }
+  }
+
+  function addCustomItem(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const label = customItemLabel.trim();
+    if (label) void updateSubject({ label, kind: 'subject' }, 'POST');
+  }
+
+  async function generateSchedule(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsGenerating(true);
+    setMessage('กำลังคำนวณตาราง...');
+
+    try {
+      const response = await fetch('/api/schedule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ categoryId, subjects, daysPerWeek, startTime }),
+      });
+      if (response.status === 401) {
+        window.location.replace('/login');
+        return;
+      }
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'สร้างตารางไม่สำเร็จ');
+      setSubjects(data.subjects);
+      setSchedule(data.schedule);
+      setStartTime(data.schedule.startTime);
+      setMessage('');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'สร้างตารางไม่สำเร็จ');
+    } finally {
+      setIsGenerating(false);
+    }
+  }
+
+  async function updateSessionCompletion(session: Session, isCompleted: boolean) {
+    if (!schedule || categoryId === null) return;
+    const scheduleId = schedule.id;
+    const selectedCategoryId = categoryId;
+    setSchedule((current) => current && ({
+      ...current,
+      sessions: current.sessions.map((item) =>
+        item.id === session.id ? { ...item, isCompleted } : item,
+      ),
+    }));
+
+    try {
+      const response = await fetch('/api/schedule', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          categoryId: selectedCategoryId,
+          scheduleId,
+          sessionId: session.id,
+          isCompleted,
+        }),
+      });
+      if (response.status === 401) {
+        window.location.replace('/login');
+        return;
+      }
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'บันทึกความคืบหน้าไม่สำเร็จ');
+      setMessage('');
+    } catch (error) {
+      setSchedule((current) => current && ({
+        ...current,
+        sessions: current.sessions.map((item) =>
+          item.id === session.id ? { ...item, isCompleted: session.isCompleted } : item,
+        ),
+      }));
+      setMessage(error instanceof Error ? error.message : 'บันทึกความคืบหน้าไม่สำเร็จ');
+    }
+  }
+
+  const totalSessions = schedule?.sessions.length ?? 0;
+  const completedHours = schedule?.sessions.filter((session) => session.isCompleted).length ?? 0;
+  const completionPercent = totalSessions > 0 ? Math.round((completedHours / totalSessions) * 100) : 0;
+  const weightPercentages = getNormalizedWeightPercentages(subjects);
+  const scheduledCounts = subjects.map((subject, index) => ({
+    ...subject,
+    targetPercent: weightPercentages[index] ?? 0,
+    count: schedule?.sessions.filter((session) => session.subjectKey === subject.key).length ?? 0,
+    completedCount: schedule?.sessions.filter((session) =>
+      session.subjectKey === subject.key && session.isCompleted,
+    ).length ?? 0,
+  }));
+
+  return (
+    <main className="app-shell">
+      <AppNavigation activePage="study-plan" username={username} />
+      <header className="page-header">
+        <div>
+          <p className="eyebrow">STUDY PLAN</p>
+          <h1>{categories.find((category) => category.id === categoryId)?.name ?? 'Study Plan'}</h1>
+        </div>
+        <div className="header-actions">
+          {message && (
+            <p className="connection-status" aria-live="polite">
+              <span className={`status-dot ${message.includes('ไม่') ? 'status-error' : ''}`} />
+              {message}
+            </p>
+          )}
+        </div>
+      </header>
+
+      <div className="workspace">
+        <aside className="settings-panel">
+          <div className="category-manager">
+            <label htmlFor="category-picker">หมวดหมู่แผน</label>
+            {categories.length > 0 && (
+              <div className="category-select-row">
+                <select
+                  id="category-picker"
+                  value={categoryId ?? ''}
+                  onChange={(event) => {
+                    const nextId = Number(event.target.value);
+                    const selected = categories.find((category) => category.id === nextId);
+                    if (selected) void loadCategory(nextId, selected);
+                  }}
+                >
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>{category.name}</option>
+                  ))}
+                </select>
+                <button className="remove-category-button" type="button" onClick={deleteCategory}>
+                  ลบหมวด
+                </button>
+              </div>
+            )}
+            <form className="category-add-row" onSubmit={addCategory}>
+              <label className="sr-only" htmlFor="new-category-name">ชื่อหมวดหมู่ใหม่</label>
+              <input
+                id="new-category-name"
+                value={categoryName}
+                onChange={(event) => setCategoryName(event.target.value)}
+                placeholder="เช่น เตรียมสอบ Admission"
+                maxLength={60}
+                required
+              />
+              <button className="add-subject-button" type="submit">เพิ่มหมวด</button>
+            </form>
+          </div>
+
+        {categoryId !== null && (
+          <section className="category-notes-section" aria-labelledby="category-notes-title">
+            <div className="section-heading">
+              <h2 id="category-notes-title">บันทึกเพิ่มเติมของหมวดนี้</h2>
+              <button className="add-subject-button" type="button" onClick={() => void saveCategoryNotes()} disabled={isSavingNotes}>
+                {isSavingNotes ? 'กำลังบันทึก...' : 'บันทึกโน้ต'}
+              </button>
+            </div>
+            <div className="category-notes-grid">
+              <label className="category-note-field">
+                <span>Future Note</span>
+                <textarea
+                  value={futureNote}
+                  onChange={(event) => setFutureNote(event.target.value)}
+                  maxLength={10000}
+                  placeholder="เป้าหมายหรือสิ่งที่ต้องเตรียมในอนาคต"
+                  rows={4}
+                />
+              </label>
+              <label className="category-note-field">
+                <span>Lecture</span>
+                <textarea
+                  value={lectureNotes}
+                  onChange={(event) => setLectureNotes(event.target.value)}
+                  maxLength={10000}
+                  placeholder="จดหัวข้อหรือสรุปจากการเรียน"
+                  rows={4}
+                />
+              </label>
+            </div>
+          </section>
+        )}
+
+          {categoryId === null ? (
+            <p className="no-subjects">สร้างหมวดหมู่ก่อนเพิ่มวิชาและกิจกรรม</p>
+          ) : (
+            <>
+              <div className="section-heading category-items-heading">
+                <h2>รายการในหมวดนี้</h2>
+                {subjects.length > 0 && <span className="small-label">สัดส่วนเป้าหมายรวม 100%</span>}
+              </div>
+              <div>
+            <fieldset className="subject-list">
+              <legend className="sr-only">รายการที่เพิ่มในหมวดรายวิชาและกิจกรรม</legend>
+              {subjects.length === 0 && <p className="no-subjects">ยังไม่มีรายการในหมวดนี้</p>}
+              {subjects.map((subject, index) => (
+                <div className="subject-control" key={subject.key}>
+                  <label htmlFor={`weight-${subject.key}`} className="subject-name">
+                    <span className="subject-mark" style={{ '--subject-color': subject.color } as CSSProperties} />
+                    <span className="subject-label">{subject.label}</span>
+                  </label>
+                  <span className={`item-kind item-kind-${subject.kind}`}>
+                    {subject.kind === 'activity' ? 'กิจกรรม' : 'วิชา'}
+                  </span>
+                  <select
+                    id={`weight-${subject.key}`}
+                    className="weight-select"
+                    value={subject.weight}
+                    onChange={(event) => changeWeight(subject.key, Number(event.target.value) as PriorityWeight)}
+                    aria-label={`ระดับความสำคัญ${subject.kind === 'activity' ? 'กิจกรรม' : 'วิชา'}${subject.label}`}
+                  >
+                    {PRIORITY_WEIGHT_LEVELS.map((weight) => (
+                      <option key={weight} value={weight}>{weight}%</option>
+                    ))}
+                  </select>
+                  <output className="weight-value">{scheduledCounts[index].targetPercent}% สัดส่วน</output>
+                  <button
+                    className="remove-subject"
+                    type="button"
+                    aria-label={`นำ${subject.kind === 'activity' ? 'กิจกรรม' : 'วิชา'}${subject.label}ออก`}
+                    onClick={() => updateSubject({ subjectKey: subject.key }, 'DELETE')}
+                  >
+                    นำออก
+                  </button>
+                </div>
+              ))}
+            </fieldset>
+
+            <form className="custom-item-form" onSubmit={addCustomItem}>
+              <label htmlFor="custom-item-label">เพิ่มวิชาในหมวดนี้</label>
+              <div className="custom-item-row">
+                <input
+                  id="custom-item-label"
+                  type="text"
+                  value={customItemLabel}
+                  onChange={(event) => setCustomItemLabel(event.target.value)}
+                  placeholder="เช่น ไทย, เคมี"
+                  maxLength={60}
+                  required
+                />
+                <button className="add-subject-button" type="submit">เพิ่มวิชา</button>
+              </div>
+            </form>
+
+            <div className="schedule-settings">
+              <label htmlFor="days-per-week">วันอ่านต่อสัปดาห์</label>
+              <select
+                id="days-per-week"
+                value={daysPerWeek}
+                onChange={(event) => setDaysPerWeek(Number(event.target.value))}
+              >
+                {Array.from({ length: 7 }, (_, index) => index + 1).map((days) => (
+                  <option key={days} value={days}>{days} วัน</option>
+                ))}
+              </select>
+
+              <label htmlFor="start-time">เริ่มอ่าน</label>
+              <input
+                id="start-time"
+                type="time"
+                min="06:00"
+                max="21:00"
+                step="3600"
+                value={startTime}
+                onChange={(event) => setStartTime(event.target.value)}
+              />
+
+              <span className="schedule-settings-label">สิ้นสุด</span>
+              <span className="scheduled-end-time">22:00 น.</span>
+              <span className="schedule-settings-note">พักกลางวัน 12:00–13:00 น.</span>
+            </div>
+
+            <form onSubmit={generateSchedule}>
+              <button className="generate-button" type="submit" disabled={isGenerating || isLoading || subjects.length === 0 || categoryId === null}>
+                {isGenerating ? 'กำลังจัดตาราง...' : 'สร้างตารางอัตโนมัติ'}
+              </button>
+            </form>
+          </div>
+          <p className="panel-note">
+            {subjects.length > 0
+              ? '1 ชั่วโมงต่อ 1 ช่วงอ่าน · ปรับน้ำหนักได้ตั้งแต่ 1 ถึง 5'
+              : 'เพิ่มรายการเพื่อกำหนดน้ำหนักและสร้างตาราง'}
+          </p>
+            </>
+          )}
+        </aside>
+
+        <section className="schedule-panel" aria-labelledby="schedule-title">
+          <div className="section-heading schedule-title-row">
+            <div>
+              <p className="eyebrow">{categories.find((category) => category.id === categoryId)?.name ?? 'WEEKLY PLAN'}</p>
+              <h2 id="schedule-title">แผนประจำสัปดาห์</h2>
+            </div>
+            {schedule && (
+              <p className="total-time">อ่านแล้ว {completedHours}/{totalSessions} ชม. · {completionPercent}%</p>
+            )}
+          </div>
+
+          {schedule ? (
+            <>
+              <div className="week-grid" style={{ '--day-count': schedule.daysPerWeek } as CSSProperties}>
+                {Array.from({ length: schedule.daysPerWeek }, (_, dayIndex) => (
+                  <section className="day-column" key={dayIndex} aria-label={`วัน${dayNames[dayIndex]}`}>
+                    <h3>{dayNames[dayIndex]}</h3>
+                    <div className="day-sessions">
+                      {Array.from({ length: schedule.sessionsPerDay }, (_, sessionIndex) => {
+                        const session = schedule.sessions.find((item) =>
+                          item.dayIndex === dayIndex && item.sessionIndex === sessionIndex,
+                        );
+                        const subject = subjects.find((item) => item.key === session?.subjectKey);
+                        return (
+                          <div
+                            className={`session-block ${session?.isCompleted ? 'session-completed' : ''}`}
+                            key={sessionIndex}
+                            style={{ '--subject-color': subject?.color ?? '#d8dedb' } as CSSProperties}
+                          >
+                            <span className="session-number">{getSessionTimeRange(schedule.startTime, sessionIndex)}</span>
+                            <div className="session-subject-row">
+                              <span className="session-subject">{subject?.label ?? '—'}</span>
+                              {session && subject && (
+                                <div className="session-note-actions">
+                                  <button
+                                    className={`session-note-button ${session.futureNote ? 'has-note' : ''}`}
+                                    type="button"
+                                    onClick={() => openSessionNote(session, 'future')}
+                                  >
+                                    Future Note
+                                  </button>
+                                  <button
+                                    className={`session-note-button ${session.lectureNotes ? 'has-note' : ''}`}
+                                    type="button"
+                                    onClick={() => openSessionNote(session, 'lecture')}
+                                  >
+                                    Lecture
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                            {session && openSessionNoteId === session.id && (
+                              <div className="session-note-editor">
+                                <div className="session-note-tabs">
+                                  <button
+                                    type="button"
+                                    className={subjectNoteType === 'future' ? 'active' : ''}
+                                    onClick={() => {
+                                      setSubjectNoteType('future');
+                                      setSubjectNoteDraft(session.futureNote);
+                                    }}
+                                  >
+                                    Future Note
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={subjectNoteType === 'lecture' ? 'active' : ''}
+                                    onClick={() => {
+                                      setSubjectNoteType('lecture');
+                                      setSubjectNoteDraft(session.lectureNotes);
+                                    }}
+                                  >
+                                    Lecture
+                                  </button>
+                                </div>
+                                <textarea
+                                  value={subjectNoteDraft}
+                                  onChange={(event) => setSubjectNoteDraft(event.target.value)}
+                                  maxLength={10000}
+                                  placeholder={subjectNoteType === 'future' ? 'สิ่งที่ต้องทำหรือเตรียมต่อไป...' : 'หัวข้อหรือสรุปจาก Lecture...'}
+                                  rows={3}
+                                />
+                                <div className="session-note-editor-actions">
+                                  <button type="button" onClick={() => setOpenSessionNoteId(null)}>ยกเลิก</button>
+                                  <button type="button" onClick={() => void saveSessionNote(session)} disabled={isSavingSubjectNote}>
+                                    {isSavingSubjectNote ? 'กำลังบันทึก...' : 'บันทึก'}
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                            <label className="session-completion">
+                              <input
+                                type="checkbox"
+                                checked={session?.isCompleted ?? false}
+                                disabled={!session}
+                                onChange={(event) => {
+                                  if (session) void updateSessionCompletion(session, event.target.checked);
+                                }}
+                                aria-label={`อ่าน${subject?.label ?? 'ช่วงนี้'}เสร็จแล้ว`}
+                              />
+                              <span>อ่านแล้ว</span>
+                            </label>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ))}
+              </div>
+
+              <div className="allocation">
+                <h3>สัดส่วนเป้าหมาย (รวม 100%)</h3>
+                <div className="allocation-list">
+                  {scheduledCounts.map((subject) => (
+                    <div className="allocation-row" key={subject.key}>
+                      <span className="allocation-name">
+                        <span className="subject-mark" style={{ '--subject-color': subject.color } as CSSProperties} />
+                        {subject.label}
+                      </span>
+                      <div className="allocation-track" aria-label={`${subject.label} ${subject.count} ชั่วโมง`}>
+                        <span
+                          className="allocation-fill"
+                          style={{
+                            '--subject-color': subject.color,
+                            width: `${totalSessions ? (subject.count / totalSessions) * 100 : 0}%`,
+                          } as CSSProperties}
+                        />
+                      </div>
+                      <span className="allocation-count">อ่าน {subject.completedCount}/{subject.count} ชม.</span>
+                      <span className="allocation-share">
+                        เป้า {subject.targetPercent}% · {subject.count > 0
+                          ? Math.round((subject.completedCount / subject.count) * 100)
+                          : 0}% เสร็จ
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="empty-state">
+              <p>ยังไม่มีตารางอ่าน</p>
+              <span>{subjects.length > 0 ? 'กำหนดน้ำหนักแต่ละรายการ แล้วสร้างตารางเพื่อเริ่มต้น' : 'เพิ่มรายการเพื่อเริ่มจัดตาราง'}</span>
+            </div>
+          )}
+        </section>
+      </div>
+    </main>
+  );
+}

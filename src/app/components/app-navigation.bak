@@ -1,0 +1,54 @@
+'use client';
+
+import Link from 'next/link';
+
+export type AppPage = 'home' | 'study-plan' | 'analytics';
+
+const links: Array<{ href: string; id: AppPage; label: string; icon: string }> = [
+  { href: '/', id: 'home', label: 'Home', icon: '🏠' },
+  { href: '/study-plan', id: 'study-plan', label: 'Schedule', icon: '📅' },
+  { href: '/analytics', id: 'analytics', label: 'Analytics', icon: '📊' },
+];
+
+export default function AppNavigation({
+  activePage,
+  username,
+}: {
+  activePage: AppPage;
+  username?: string;
+}) {
+  return (
+    <aside className="app-topbar">
+      <Link className="app-brand" href="/" aria-label="Study Scheduler dashboard">
+        <span className="app-brand-mark" aria-hidden="true">S</span>
+        <span>Study<br />Scheduler</span>
+      </Link>
+      <nav className="app-navigation" aria-label="เมนูหลัก">
+        {links.map((link) => (
+          <Link
+            className={`app-navigation-link ${activePage === link.id ? 'app-navigation-active' : ''}`}
+            href={link.href}
+            key={link.id}
+            aria-current={activePage === link.id ? 'page' : undefined}
+          >
+            <span className="nav-icon" aria-hidden="true">{link.icon}</span>
+            <span>{link.label}</span>
+          </Link>
+        ))}
+        <Link className="app-navigation-link app-navigation-logout" href="/logout">
+          <span className="nav-icon" aria-hidden="true">↪</span>
+          <span>Logout</span>
+        </Link>
+      </nav>
+      {username ? (
+        <div className="topbar-account" aria-label={`Logged in as ${username}`}>
+          <span className="account-caption">บัญชีผู้ใช้</span>
+          <strong>{username}</strong>
+        </div>
+      ) : null}
+      <div className="sidebar-logout">
+        <Link className="logout-link" href="/logout">Logout</Link>
+      </div>
+    </aside>
+  );
+}

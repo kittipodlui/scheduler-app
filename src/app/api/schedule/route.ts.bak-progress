@@ -1,0 +1,285 @@
+import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise';
+import { getSessionUser } from '@/lib/auth';
+import { getOwnedCategory } from '@/lib/categories';
+import { createStudySchedule } from '@/lib/genetic-algorithm';
+import { ensureDatabase, getPool, getUserSubjectLists } from '@/lib/database';
+import type { SubjectPreference } from '@/lib/subjects';
+import { getStudySessionsPerDay, isValidStudyStartTime, STUDY_END_TIME } from '@/lib/study-time';
+import { isPriorityWeight, type PriorityWeight } from '@/lib/subjects';
+
+export const runtime = 'nodejs';
+
+type ScheduleRow = RowDataPacket & {
+  id: number;
+  days_per_week: number;
+  sessions_per_day: number;
+  start_time: string;
+  end_time: string;
+  created_at: Date;
+};
+
+type SessionRow = RowDataPacket & {
+  id: number;
+  day_index: number;
+  session_index: number;
+  subject_key: string;
+  is_completed: number;
+};
+
+function respondWithError(error: unknown): Response {
+  const detail = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ';
+  const isConfigurationError = detail.includes('.env.local');
+  console.error('Study schedule API error:', detail);
+  const errorCode = error && typeof error === 'object' && 'code' in error ? error.code : undefined;
+  if (errorCode === 'ER_ACCESS_DENIED_ERROR') {
+    return Response.json(
+      { error: 'MySQL ปฏิเสธการเข้าสู่ระบบ ตรวจสอบ MYSQL_USER และ MYSQL_PASSWORD ในไฟล์ .env.local' },
+      { status: 503 },
+    );
+  }
+  return Response.json(
+    {
+      error: isConfigurationError
+        ? detail
+        : 'เชื่อมต่อหรือบันทึก MySQL ไม่สำเร็จ ตรวจสอบสถานะเซิร์ฟเวอร์และค่าการเชื่อมต่อ',
+    },
+    { status: isConfigurationError ? 503 : 500 },
+  );
+}
+
+export async function GET(request: Request): Promise<Response> {
+  try {
+    const pool = getPool();
+    await ensureDatabase(pool);
+    const user = await getSessionUser(request, pool);
+    if (!user) return Response.json({ error: 'กรุณาเข้าสู่ระบบ' }, { status: 401 });
+    const categoryId = Number(new URL(request.url).searchParams.get('categoryId'));
+    const category = Number.isSafeInteger(categoryId) && categoryId > 0
+      ? await getOwnedCategory(pool, user.id, categoryId)
+      : null;
+    if (!category) return Response.json({ error: 'กรุณาเลือกหมวดที่เป็นของบัญชีคุณ' }, { status: 400 });
+    const { subjects, availableSubjects } = await getUserSubjectLists(pool, user.id, category.id);
+    if (subjects.length === 0) {
+      return Response.json({ subjects, availableSubjects, schedule: null });
+    }
+    const [schedules] = await pool.query<ScheduleRow[]>(
+      'SELECT id, days_per_week, sessions_per_day, start_time, end_time, created_at FROM schedules WHERE user_id = ? AND category_id = ? ORDER BY id DESC LIMIT 1',
+      [user.id, category.id],
+    );
+    if (!schedules[0]) return Response.json({ subjects, availableSubjects, schedule: null });
+
+    const latest = schedules[0];
+    const [sessions] = await pool.execute<SessionRow[]>(
+      'SELECT id, day_index, session_index, subject_key, is_completed FROM study_sessions WHERE schedule_id = ? ORDER BY day_index, session_index',
+      [latest.id],
+    );
+    if (sessions.some((session) => !subjects.some((subject) => subject.key === session.subject_key))) {
+      return Response.json({ subjects, availableSubjects, schedule: null });
+    }
+    return Response.json({
+      subjects,
+      availableSubjects,
+      schedule: {
+        id: latest.id,
+        daysPerWeek: latest.days_per_week,
+        sessionsPerDay: latest.sessions_per_day,
+        startTime: latest.start_time.slice(0, 5),
+        endTime: latest.end_time.slice(0, 5),
+        createdAt: latest.created_at,
+        sessions: sessions.map((session) => ({
+          id: session.id,
+          dayIndex: session.day_index,
+          sessionIndex: session.session_index,
+          subjectKey: session.subject_key,
+          isCompleted: Boolean(session.is_completed),
+        })),
+      },
+    });
+  } catch (error) {
+    return respondWithError(error);
+  }
+}
+
+export async function POST(request: Request): Promise<Response> {
+  try {
+    const pool = getPool();
+    await ensureDatabase(pool);
+    const user = await getSessionUser(request, pool);
+    if (!user) return Response.json({ error: 'กรุณาเข้าสู่ระบบ' }, { status: 401 });
+
+    const body: unknown = await request.json();
+    if (!body || typeof body !== 'object') {
+      return Response.json({ error: 'ข้อมูลตั้งค่าไม่ถูกต้อง' }, { status: 400 });
+    }
+
+    const input = body as Record<string, unknown>;
+    const categoryId = Number(input.categoryId);
+    const category = Number.isSafeInteger(categoryId) && categoryId > 0
+      ? await getOwnedCategory(pool, user.id, categoryId)
+      : null;
+    if (!category) return Response.json({ error: 'กรุณาเลือกหมวดที่เป็นของบัญชีคุณ' }, { status: 400 });
+    const daysPerWeek = input.daysPerWeek;
+    const startTime = input.startTime;
+    if (!isValidStudyStartTime(startTime)) {
+      return Response.json({ error: 'เลือกเวลาเริ่มอ่านเป็นชั่วโมงเต็ม ตั้งแต่ 06:00 ถึง 21:00' }, { status: 400 });
+    }
+    const sessionsPerDay = getStudySessionsPerDay(startTime);
+    const submittedSubjects = input.subjects;
+    if (
+      !Number.isInteger(daysPerWeek) || (daysPerWeek as number) < 1 || (daysPerWeek as number) > 7 ||
+      !Array.isArray(submittedSubjects) || submittedSubjects.length < 1 || submittedSubjects.length > 50
+    ) {
+      return Response.json({ error: 'จำนวนวันหรือรายการวิชาอยู่นอกช่วงที่กำหนด' }, { status: 400 });
+    }
+
+    const submitted = submittedSubjects as Array<Partial<SubjectPreference>>;
+    const { subjects: addedSubjects } = await getUserSubjectLists(pool, user.id, category.id);
+    const addedByKey = new Map(addedSubjects.map((subject) => [subject.key, subject]));
+    const submittedKeys = submitted.map((subject) => subject?.key);
+    const validSubjects = new Set(submittedKeys).size === submitted.length
+      && submitted.every((subject) => {
+        return typeof subject.key === 'string' && addedByKey.has(subject.key)
+          && isPriorityWeight(subject.weight);
+      });
+    if (!validSubjects) {
+      return Response.json({ error: 'เพิ่มวิชาก่อนสร้างตาราง และเลือก weight 10%, 20%, 25% หรือ 30%' }, { status: 400 });
+    }
+    const subjects: SubjectPreference[] = submitted.map((subject) => ({
+      ...addedByKey.get(subject.key!)!,
+      weight: subject.weight as PriorityWeight,
+    }));
+
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+
+      // Preserve completed sessions when the automatic schedule is regenerated.
+      // A completion stays checked when the same subject remains in the same slot.
+      const completedSessionKeys = new Set<string>();
+      const [previousSchedules] = await connection.query<ScheduleRow[]>(
+        'SELECT id FROM schedules WHERE user_id = ? AND category_id = ? ORDER BY id DESC LIMIT 1',
+        [user.id, category.id],
+      );
+      if (previousSchedules[0]) {
+        const [previousSessions] = await connection.execute<SessionRow[]>(
+          'SELECT day_index, session_index, subject_key, is_completed FROM study_sessions WHERE schedule_id = ?',
+          [previousSchedules[0].id],
+        );
+        for (const previousSession of previousSessions) {
+          if (previousSession.is_completed) {
+            completedSessionKeys.add(
+              `${previousSession.day_index}:${previousSession.session_index}:${previousSession.subject_key}`,
+            );
+          }
+        }
+      }
+      for (const subject of subjects) {
+        await connection.execute(
+          'UPDATE user_subject_preferences SET weight = ? WHERE user_id = ? AND subject_key = ? AND is_added = 1',
+          [subject.weight, user.id, subject.key],
+        );
+      }
+
+      const scheduleSeed = JSON.stringify({
+        userId: user.id,
+        categoryId: category.id,
+        daysPerWeek,
+        startTime,
+        subjects: subjects.map((subject) => [subject.key, subject.weight]),
+      });
+      const grid = createStudySchedule(
+        subjects,
+        daysPerWeek as number,
+        sessionsPerDay as number,
+        scheduleSeed,
+      );
+      const [insertResult] = await connection.execute<ResultSetHeader>(
+        'INSERT INTO schedules (user_id, category_id, days_per_week, sessions_per_day, start_time, end_time) VALUES (?, ?, ?, ?, ?, ?)',
+        [user.id, category.id, daysPerWeek as number, sessionsPerDay, startTime, `${STUDY_END_TIME}:00`],
+      );
+
+      const savedSessions: Array<{
+        id: number;
+        dayIndex: number;
+        sessionIndex: number;
+        subjectKey: string;
+        isCompleted: boolean;
+      }> = [];
+      for (const [dayIndex, day] of grid.entries()) {
+        for (const [sessionIndex, subjectKey] of day.entries()) {
+          const [sessionResult] = await connection.execute<ResultSetHeader>(
+            'INSERT INTO study_sessions (schedule_id, day_index, session_index, subject_key) VALUES (?, ?, ?, ?)',
+            [insertResult.insertId, dayIndex, sessionIndex, subjectKey],
+          );
+          savedSessions.push({
+            id: sessionResult.insertId,
+            dayIndex,
+            sessionIndex,
+            subjectKey,
+            isCompleted: false,
+          });
+        }
+      }
+      await connection.commit();
+
+      const updatedSubjects = await getUserSubjectLists(pool, user.id, category.id);
+      return Response.json({
+        subjects,
+        availableSubjects: updatedSubjects.availableSubjects,
+        schedule: {
+          id: insertResult.insertId,
+          daysPerWeek,
+          sessionsPerDay,
+          startTime,
+          endTime: STUDY_END_TIME,
+          createdAt: new Date().toISOString(),
+          sessions: savedSessions,
+        },
+      });
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    return respondWithError(error);
+  }
+}
+
+export async function PATCH(request: Request): Promise<Response> {
+  try {
+    const pool = getPool();
+    await ensureDatabase(pool);
+    const user = await getSessionUser(request, pool);
+    if (!user) return Response.json({ error: 'กรุณาเข้าสู่ระบบ' }, { status: 401 });
+
+    const body: unknown = await request.json();
+    if (!body || typeof body !== 'object') {
+      return Response.json({ error: 'ข้อมูลสถานะอ่านไม่ถูกต้อง' }, { status: 400 });
+    }
+    const input = body as Record<string, unknown>;
+    const categoryId = Number(input.categoryId);
+    const scheduleId = Number(input.scheduleId);
+    const sessionId = Number(input.sessionId);
+    if (!Number.isSafeInteger(categoryId) || !Number.isSafeInteger(scheduleId)
+      || !Number.isSafeInteger(sessionId) || typeof input.isCompleted !== 'boolean') {
+      return Response.json({ error: 'ข้อมูลสถานะอ่านไม่ถูกต้อง' }, { status: 400 });
+    }
+    const category = await getOwnedCategory(pool, user.id, categoryId);
+    if (!category) return Response.json({ error: 'ไม่พบหมวดนี้' }, { status: 404 });
+    const [sessions] = await pool.execute<RowDataPacket[]>(
+      'SELECT study_sessions.id FROM study_sessions INNER JOIN schedules ON schedules.id = study_sessions.schedule_id WHERE study_sessions.id = ? AND schedules.id = ? AND schedules.user_id = ? AND schedules.category_id = ? LIMIT 1',
+      [sessionId, scheduleId, user.id, category.id],
+    );
+    if (!sessions[0]) return Response.json({ error: 'ไม่พบช่วงอ่านนี้' }, { status: 404 });
+
+    await pool.execute(
+      'UPDATE study_sessions SET is_completed = ? WHERE id = ?',
+      [input.isCompleted ? 1 : 0, sessionId],
+    );
+    return Response.json({ sessionId, isCompleted: input.isCompleted });
+  } catch (error) {
+    return respondWithError(error);
+  }
+}

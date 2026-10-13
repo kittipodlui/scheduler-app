@@ -1,36 +1,38 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Study Planner
 
-## Getting Started
+เว็บจัดตารางอ่านหนังสือสำหรับนักเรียนมัธยม ใช้ Genetic Algorithm จัดวิชาอังกฤษ ฟิสิกส์ คณิต และชีวะตาม weight ความสำคัญ พร้อมกระจายวิชาไม่ให้ซ้ำติดกัน และบันทึกค่ากับตารางล่าสุดลง MySQL
 
-First, run the development server:
+## เริ่มใช้งาน
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+1. รัน `database/setup.sql` ด้วย MySQL เพื่อสร้างฐานข้อมูลและตาราง
+2. ตั้งค่าการเชื่อมต่อใน `.env.local`:
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+	```env
+	MYSQL_HOST=127.0.0.1
+	MYSQL_PORT=3308
+	MYSQL_USER=root
+	MYSQL_PASSWORD=<รหัสผ่าน MySQL>
+	MYSQL_DATABASE=study_scheduler
+	```
+3. ติดตั้งและเปิดเว็บ:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+	```powershell
+	npm install
+	npm run dev
+	```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+4. เปิด http://localhost:3000
 
-## Learn More
+สร้างหมวดแผนและเพิ่มวิชาที่ต้องการอ่านในแต่ละหมวดได้เอง ตั้ง priority weight ได้ที่ 10%, 20%, 25% หรือ 30%; ระบบ normalize สัดส่วนเป้าหมายให้รวม 100% เลือกเวลาเริ่มอ่านเป็นชั่วโมงเต็มระหว่าง 06:00–21:00 โดยระบบจัดช่วงละ 1 ชั่วโมง เว้นพักกลางวัน 12:00–13:00 และจบไม่เกิน 22:00 ติ๊กแต่ละช่วงเมื่ออ่านเสร็จเพื่อดูชั่วโมงและเปอร์เซ็นต์ความคืบหน้า
 
-To learn more about Next.js, take a look at the following resources:
+เปิด `/register` เพื่อสร้างบัญชี (ระบบสร้างแผนหลัก “แผนการอ่านหนังสือ” ให้หนึ่งแผน) หรือ `/login` เพื่อเข้าสู่ระบบ หน้า `/logout` ใช้ยืนยันออกจากระบบ รหัสผ่านจะถูก hash ก่อนบันทึก และ session กับข้อมูลแผนอ่านจะแยกตามบัญชี สามารถเพิ่มหมวดส่วนตัวและแก้ไขหรือลบหมวดเหล่านั้นได้ แต่แผนหลักไม่สามารถแก้ไขหรือลบได้
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## หมายเหตุสำหรับการส่งโปรเจกต์
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+ห้ามส่งไฟล์ `.env.local` หรือรหัสผ่าน MySQL ขึ้น Git และไม่ต้องส่ง `node_modules` / `.next` ให้เพื่อน
 
-## Deploy on Vercel
+หลังจาก clone โปรเจกต์ ให้สร้าง `.env.local` ของเครื่องตัวเองตามตัวอย่างด้านบน แล้วรัน `npm install`
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `Home` แสดงจำนวนหมวด ชั่วโมงตามแผน และชั่วโมงที่อ่านเสร็จ
+- `Study Plan` สร้างหมวด/วิชา ตั้ง weight และเวลาอ่าน พร้อมจด `Future Note` และ `Lecture` แยกตามหมวด
+- `Analytics` แสดงชั่วโมงตามแผนจาก Genetic Algorithm เทียบกับชั่วโมงที่ติ๊กอ่านเสร็จ แยกตามหมวดและรายวิชา
