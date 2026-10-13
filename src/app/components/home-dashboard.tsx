@@ -63,14 +63,14 @@ type HomeTodayItem = {
   title: string;
   subtitle: string;
   time: string;
-  status: "à¸¢à¸±à¸‡à¹„à¸¡à¹ˆà¹€à¸£à¸´à¹ˆà¸¡" | "à¸à¸³à¸¥à¸±à¸‡à¸—à¸³" | "à¹€à¸ªà¸£à¹‡à¸ˆà¹à¸¥à¹‰à¸§";
+  status: "ยังไม่เริ่ม" | "กำลังทำ" | "เสร็จแล้ว";
   lectureNotes?: string;
 };
 const activityTypeLabels = {
-  study: "à¸­à¹ˆà¸²à¸™à¸«à¸™à¸±à¸‡à¸ªà¸·à¸­",
-  homework: "à¸à¸²à¸£à¸šà¹‰à¸²à¸™",
+  study: "อ่านหนังสือ",
+  homework: "การบ้าน",
   project: "Project",
-  review: "à¸—à¸šà¸—à¸§à¸™",
+  review: "ทบทวน",
 } as const;
 function toIsoDate(value: string): string | null {
   const trimmed = value.trim();
@@ -116,14 +116,14 @@ async function fetchCategoryActivities(categoryId: number) {
   );
   if (response.status === 401) {
     window.location.replace("/login");
-    throw new Error("à¸à¸£à¸¸à¸“à¸²à¹€à¸‚à¹‰à¸²à¸ªà¸¹à¹ˆà¸£à¸°à¸šà¸š");
+    throw new Error("กรุณาเข้าสู่ระบบ");
   }
   const data = (await response.json()) as {
     activities?: StudyActivity[];
     courses?: StudyCourse[];
     error?: string;
   };
-  if (!response.ok) throw new Error(data.error || "à¹‚à¸«à¸¥à¸”à¸à¸´à¸ˆà¸à¸£à¸£à¸¡à¹„à¸¡à¹ˆà¸ªà¸³à¹€à¸£à¹‡à¸ˆ");
+  if (!response.ok) throw new Error(data.error || "โหลดกิจกรรมไม่สำเร็จ");
   return { activities: data.activities ?? [], courses: data.courses ?? [] };
 }
 export default function HomeDashboard({ username }: { username: string }) {
@@ -176,7 +176,7 @@ export default function HomeDashboard({ username }: { username: string }) {
           error?: string;
         };
         if (!response.ok)
-          throw new Error(data.error || "à¹‚à¸«à¸¥à¸”à¸«à¸¡à¸§à¸”à¸«à¸¡à¸¹à¹ˆà¹„à¸¡à¹ˆà¸ªà¸³à¹€à¸£à¹‡à¸ˆ");
+          throw new Error(data.error || "โหลดหมวดหมู่ไม่สำเร็จ");
         const nextCategories = data.categories ?? [];
         if (cancelled) return;
         setCategories(nextCategories);
@@ -245,7 +245,7 @@ export default function HomeDashboard({ username }: { username: string }) {
       } catch (error) {
         if (!cancelled)
           setPageMessage(
-            error instanceof Error ? error.message : "à¹‚à¸«à¸¥à¸”à¸‚à¹‰à¸­à¸¡à¸¹à¸¥à¹„à¸¡à¹ˆà¸ªà¸³à¹€à¸£à¹‡à¸ˆ",
+            error instanceof Error ? error.message : "โหลดข้อมูลไม่สำเร็จ",
           );
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -263,7 +263,7 @@ export default function HomeDashboard({ username }: { username: string }) {
     try {
       const selectedCategoryId = Number(categoryId);
       if (!Number.isSafeInteger(selectedCategoryId) || selectedCategoryId < 1) {
-        throw new Error("à¸¢à¸±à¸‡à¹„à¸¡à¹ˆà¸¡à¸µà¸«à¸¡à¸§à¸”à¸«à¸¡à¸¹à¹ˆà¸ªà¸³à¸«à¸£à¸±à¸šà¸šà¸±à¸™à¸—à¸¶à¸à¸à¸´à¸ˆà¸à¸£à¸£à¸¡");
+        throw new Error("ยังไม่มีหมวดหมู่สำหรับบันทึกกิจกรรม");
       }
       const startDateIso = toIsoDate(startDate);
       const endDateIso = toIsoDate(endDate);
@@ -272,11 +272,11 @@ export default function HomeDashboard({ username }: { username: string }) {
         (endDate.trim() && !endDateIso)
       ) {
         throw new Error(
-          "à¸à¸£à¸¸à¸“à¸²à¸à¸£à¸­à¸à¸§à¸±à¸™à¸—à¸µà¹ˆà¹ƒà¸™à¸£à¸¹à¸›à¹à¸šà¸š dd/mm/yyyy à¹à¸¥à¸°à¸•à¸£à¸§à¸ˆà¸ªà¸­à¸šà¸§à¸±à¸™à¸—à¸µà¹ˆà¸­à¸µà¸à¸„à¸£à¸±à¹‰à¸‡",
+          "กรุณากรอกวันที่ในรูปแบบ dd/mm/yyyy และตรวจสอบวันที่อีกครั้ง",
         );
       }
       if (startDateIso && endDateIso && startDateIso > endDateIso) {
-        throw new Error("à¸§à¸±à¸™à¸—à¸µà¹ˆà¹€à¸£à¸´à¹ˆà¸¡à¸•à¹‰à¸­à¸‡à¹„à¸¡à¹ˆà¹€à¸à¸´à¸™à¸§à¸±à¸™à¸—à¸µà¹ˆà¸ªà¸´à¹‰à¸™à¸ªà¸¸à¸”");
+        throw new Error("วันที่เริ่มต้องไม่เกินวันที่สิ้นสุด");
       }
       const response = await fetch("/api/study-activities", {
         method: "POST",
@@ -305,10 +305,10 @@ export default function HomeDashboard({ username }: { username: string }) {
         error?: string;
       };
       if (!response.ok || !data.activity)
-        throw new Error(data.error || "à¸šà¸±à¸™à¸—à¸¶à¸à¸à¸´à¸ˆà¸à¸£à¸£à¸¡à¹„à¸¡à¹ˆà¸ªà¸³à¹€à¸£à¹‡à¸ˆ");
+        throw new Error(data.error || "บันทึกกิจกรรมไม่สำเร็จ");
       const selectedCategoryName = categories.find((category) => category.id === selectedCategoryId)?.name ?? "";
       setActivities((current) => [{ ...(data.activity as StudyActivity), categoryId: selectedCategoryId, categoryName: selectedCategoryName }, ...current]);
-      setPageMessage("à¸šà¸±à¸™à¸—à¸¶à¸à¸à¸´à¸ˆà¸à¸£à¸£à¸¡à¸¥à¸‡à¸à¸²à¸™à¸‚à¹‰à¸­à¸¡à¸¹à¸¥à¹à¸¥à¹‰à¸§");
+      setPageMessage("บันทึกกิจกรรมลงฐานข้อมูลแล้ว");
       setActivityTitle("");
       setActivityType("");
       setCourseKey("");
@@ -322,7 +322,7 @@ export default function HomeDashboard({ username }: { username: string }) {
       setIsAddModalOpen(false);
     } catch (error) {
       setFormError(
-        error instanceof Error ? error.message : "à¸šà¸±à¸™à¸—à¸¶à¸à¸à¸´à¸ˆà¸à¸£à¸£à¸¡à¹„à¸¡à¹ˆà¸ªà¸³à¹€à¸£à¹‡à¸ˆ",
+        error instanceof Error ? error.message : "บันทึกกิจกรรมไม่สำเร็จ",
       );
     } finally {
       setIsSaving(false);
@@ -363,7 +363,7 @@ export default function HomeDashboard({ username }: { username: string }) {
     if (!futureNoteActivity || !categoryId) return;
     if (!futureNoteActivity.subjectKey) {
       setFutureNoteError(
-        "à¸à¸´à¸ˆà¸à¸£à¸£à¸¡à¸™à¸µà¹‰à¹„à¸¡à¹ˆà¸¡à¸µà¸§à¸´à¸Šà¸²à¸—à¸µà¹ˆà¹€à¸Šà¸·à¹ˆà¸­à¸¡à¹„à¸§à¹‰ à¸ˆà¸¶à¸‡à¸šà¸±à¸™à¸—à¸¶à¸ Future Note à¹„à¸¡à¹ˆà¹„à¸”à¹‰",
+        "กิจกรรมนี้ไม่มีวิชาที่เชื่อมไว้ จึงบันทึก Future Note ไม่ได้",
       );
       return;
     }
@@ -386,7 +386,7 @@ export default function HomeDashboard({ username }: { username: string }) {
       }
       const data = (await response.json()) as { error?: string };
       if (!response.ok)
-        throw new Error(data.error || "à¸šà¸±à¸™à¸—à¸¶à¸ Future Note à¹„à¸¡à¹ˆà¸ªà¸³à¹€à¸£à¹‡à¸ˆ");
+        throw new Error(data.error || "บันทึก Future Note ไม่สำเร็จ");
       setActivities((current) =>
         current.map((activity) =>
           activity.id === futureNoteActivity.id
@@ -394,11 +394,11 @@ export default function HomeDashboard({ username }: { username: string }) {
             : activity,
         ),
       );
-      setPageMessage("à¸šà¸±à¸™à¸—à¸¶à¸ Future Note à¹à¸¥à¹‰à¸§");
+      setPageMessage("บันทึก Future Note แล้ว");
       setFutureNoteActivity(null);
     } catch (error) {
       setFutureNoteError(
-        error instanceof Error ? error.message : "à¸šà¸±à¸™à¸—à¸¶à¸ Future Note à¹„à¸¡à¹ˆà¸ªà¸³à¹€à¸£à¹‡à¸ˆ",
+        error instanceof Error ? error.message : "บันทึก Future Note ไม่สำเร็จ",
       );
     } finally {
       setIsSavingFutureNote(false);
@@ -428,7 +428,7 @@ export default function HomeDashboard({ username }: { username: string }) {
         error?: string;
       };
       if (!response.ok || !data.activity)
-        throw new Error(data.error || "à¹€à¸›à¸¥à¸µà¹ˆà¸¢à¸™à¸ªà¸–à¸²à¸™à¸°à¹„à¸¡à¹ˆà¸ªà¸³à¹€à¸£à¹‡à¸ˆ");
+        throw new Error(data.error || "เปลี่ยนสถานะไม่สำเร็จ");
       setActivities((current) =>
         current.map((item) =>
           item.id === activity.id
@@ -438,7 +438,7 @@ export default function HomeDashboard({ username }: { username: string }) {
       );
     } catch (error) {
       setPageMessage(
-        error instanceof Error ? error.message : "à¹€à¸›à¸¥à¸µà¹ˆà¸¢à¸™à¸ªà¸–à¸²à¸™à¸°à¹„à¸¡à¹ˆà¸ªà¸³à¹€à¸£à¹‡à¸ˆ",
+        error instanceof Error ? error.message : "เปลี่ยนสถานะไม่สำเร็จ",
       );
     }
   }
@@ -478,39 +478,37 @@ export default function HomeDashboard({ username }: { username: string }) {
     <main className="app-shell home-shell">
       <AppNavigation activePage="home" />
       <div className="home-content">
-        Â  Â  Â  Â 
+               
         <header className="home-greeting">
-
+                   
           <div>
-             <p className="eyebrow">SMART STUDY PLANNER</p>
-            Â  Â  <h1>{username}</h1>Â  Â  Â  Â  Â  Â 
-            <p className="home-date">{todayLabel}</p>Â  Â  Â  Â  Â 
+                        <p className="eyebrow">SMART STUDY PLANNER</p>       
+                <h1>{username}</h1>           
+            <p className="home-date">{todayLabel}</p>         
           </div>
-          Â  Â  Â  Â  Â 
           <button
             className="home-add-activity"
             type="button"
             onClick={startNewActivity}
             disabled={categories.length === 0}
           >
-            Â  Â  Â  Â  Â  Â  + à¹€à¸žà¸´à¹ˆà¸¡à¸à¸´à¸ˆà¸à¸£à¸£à¸¡ Â  Â  Â  Â  Â 
+            + เพิ่มกิจกรรม
           </button>
-          Â  Â  Â  Â 
         </header>
-        Â  Â  Â  Â 
-        <section className="home-summary home-summary-top" aria-label="à¸ªà¸£à¸¸à¸›à¸à¸²à¸£à¹€à¸£à¸µà¸¢à¸™">
+               
+        <section className="home-summary home-summary-top" aria-label="สรุปการเรียน">
           <article className="home-summary-item">
-            <span>à¸§à¸´à¸Šà¸²à¸—à¸µà¹ˆà¸ˆà¸±à¸”à¹„à¸§à¹‰</span>
-            <strong>{isLoading ? "â€”" : subjectCount}</strong>
+            <span>วิชาที่จัดไว้</span>
+            <strong>{isLoading ? "—" : subjectCount}</strong>
           </article>
           <article className="home-summary-item">
-            <span>à¸à¸´à¸ˆà¸à¸£à¸£à¸¡</span>
-            <strong>{isLoading ? "â€”" : activities.length}</strong>
+            <span>กิจกรรม</span>
+            <strong>{isLoading ? "—" : activities.length}</strong>
           </article>
           <article className="home-summary-item">
-            <span>à¸Šà¸±à¹ˆà¸§à¹‚à¸¡à¸‡à¸•à¸²à¸¡à¹à¸œà¸™</span>
+            <span>ชั่วโมงตามแผน</span>
             <strong>
-              {isLoading ? "â€”" : plannedHours.toFixed(1) + " à¸Šà¸¡."}
+              {isLoading ? "—" : plannedHours.toFixed(1) + " ชม."}
             </strong>
           </article>
         </section>
@@ -520,34 +518,31 @@ export default function HomeDashboard({ username }: { username: string }) {
             {pageMessage}
           </p>
         )}
-        Â  Â  Â  Â 
+               
         <section className="home-today-section" aria-labelledby="today-heading">
-          Â  Â  Â  Â  Â 
+                   
           <div className="home-section-heading">
-            Â  Â  Â  Â  Â  Â 
+                       
             <div>
-              Â  Â  Â  Â  Â  Â  Â  <p className="eyebrow"></p>Â  Â  Â  Â  Â  Â  Â 
-              <h2 id="today-heading">à¸•à¸²à¸£à¸²à¸‡à¸§à¸±à¸™à¸™à¸µà¹‰</h2>Â  Â  Â  Â  Â  Â 
+                            <p className="eyebrow">TODAY</p>             
+              <h2 id="today-heading">ตารางวันนี้</h2>           
             </div>
-            Â  Â  Â  Â  Â  Â  <span>{todayItems.length} à¸£à¸²à¸¢à¸à¸²à¸£</span>Â  Â  Â  Â  Â 
+                        <span>{todayItems.length} รายการ</span>         
           </div>
-          Â  Â  Â  Â  Â 
+                   
           {isLoading ? (
-            <p className="home-empty">à¸à¸³à¸¥à¸±à¸‡à¹‚à¸«à¸¥à¸”à¸•à¸²à¸£à¸²à¸‡...</p>
+            <p className="home-empty">กำลังโหลดตาราง...</p>
           ) : todayItems.length ? (
             <div className="home-today-list">
-              Â  Â  Â  Â  Â  Â  Â 
+                           
               {todayItems.map((item) => (
                 <article className="home-today-row" key={item.id}>
-                  Â  Â  Â  Â  Â  Â  Â  Â  Â 
-Â  Â  Â  Â  Â 
-                  Â  Â  Â  Â 
                   <div className="home-today-main">
-                    Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  <strong>{item.title}</strong>Â  Â  Â  Â  Â  Â 
-                    Â  Â  Â  Â  <span>{item.subtitle}</span>
-                    <time className="home-today-time">{item.time}</time>Â  Â  Â  Â  Â  Â  Â  Â  Â 
+                    <strong>{item.title}</strong>
+                    <span>{item.subtitle}</span>
+                    <time className="home-today-time">{item.time}</time>
                   </div>
-                  Â  Â  Â  Â  Â  Â  Â  Â  Â 
+                                   
                   {item.activityId ? (
                     (() => {
                       const activity = activities.find(
@@ -555,7 +550,7 @@ export default function HomeDashboard({ username }: { username: string }) {
                       );
                       return activity ? (
                         <div className="home-today-actions">
-                          Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â 
+                                                 
                           <button
                             type="button"
                             className={`home-status home-status-${activity.isCompleted ? "done" : "pending"}`}
@@ -564,11 +559,11 @@ export default function HomeDashboard({ username }: { username: string }) {
                               void toggleActivityCompletion(activity)
                             }
                           >
-                            Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â 
-                            {activity.isCompleted ? "à¹€à¸ªà¸£à¹‡à¸ˆà¹à¸¥à¹‰à¸§" : "à¸¢à¸±à¸‡à¹„à¸¡à¹ˆà¹€à¸£à¸´à¹ˆà¸¡"}
-                            Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â 
+                                                     
+                            {activity.isCompleted ? "เสร็จแล้ว" : "ยังไม่เริ่ม"}
+                                                   
                           </button>
-                          Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â 
+                                                 
                           <button
                             type="button"
                             className="home-note-link"
@@ -580,8 +575,8 @@ export default function HomeDashboard({ username }: { username: string }) {
                             <button
                               type="button"
                               className="home-note-icon"
-                              title={activity.lectureNotes.trim() ? "à¸”à¸¹ Lecture à¸—à¸µà¹ˆà¸šà¸±à¸™à¸—à¸¶à¸à¹„à¸§à¹‰" : "à¸”à¸¹ Future Note à¸—à¸µà¹ˆà¸šà¸±à¸™à¸—à¸¶à¸à¹„à¸§à¹‰"}
-                              aria-label={`à¸”à¸¹à¹‚à¸™à¹‰à¸•à¸—à¸µà¹ˆà¸šà¸±à¸™à¸—à¸¶à¸à¹„à¸§à¹‰: ${activity.title}`}
+                              title={activity.lectureNotes.trim() ? "ดู Lecture ที่บันทึกไว้" : "ดู Future Note ที่บันทึกไว้"}
+                              aria-label={`ดูโน้ตที่บันทึกไว้: ${activity.title}`}
                               onClick={() =>
                                 setLecturePreview({
                                   title: activity.title,
@@ -611,20 +606,20 @@ export default function HomeDashboard({ username }: { username: string }) {
                               </svg>
                             </button>
                           )}
-                          Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â 
+                                               
                         </div>
                       ) : null;
                     })()
                   ) : item.lectureNotes?.trim() ? (
                     <div className="home-today-actions">
-                      <span className={`home-status home-status-${item.status === "à¹€à¸ªà¸£à¹‡à¸ˆà¹à¸¥à¹‰à¸§" ? "done" : item.status === "à¸à¸³à¸¥à¸±à¸‡à¸—à¸³" ? "active" : "pending"}`}>
+                      <span className={`home-status home-status-${item.status === "เสร็จแล้ว" ? "done" : item.status === "กำลังทำ" ? "active" : "pending"}`}>
                         {item.status}
                       </span>
                       <button
                         type="button"
                         className="home-note-icon"
-                        title="à¸”à¸¹ Lecture à¸—à¸µà¹ˆà¸šà¸±à¸™à¸—à¸¶à¸à¹„à¸§à¹‰"
-                        aria-label={`à¸”à¸¹ Lecture à¸—à¸µà¹ˆà¸šà¸±à¸™à¸—à¸¶à¸à¹„à¸§à¹‰: ${item.title}`}
+                        title="ดู Lecture ที่บันทึกไว้"
+                        aria-label={`ดู Lecture ที่บันทึกไว้: ${item.title}`}
                         onClick={() =>
                           setLecturePreview({
                             title: item.title,
@@ -654,24 +649,24 @@ export default function HomeDashboard({ username }: { username: string }) {
                     </div>
                   ) : (
                     <span
-                      className={`home-status home-status-${item.status === "à¹€à¸ªà¸£à¹‡à¸ˆà¹à¸¥à¹‰à¸§" ? "done" : item.status === "à¸à¸³à¸¥à¸±à¸‡à¸—à¸³" ? "active" : "pending"}`}
+                      className={`home-status home-status-${item.status === "เสร็จแล้ว" ? "done" : item.status === "กำลังทำ" ? "active" : "pending"}`}
                     >
-                      Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  {item.status}Â  Â  Â  Â  Â  Â  Â  Â  Â  Â 
+                                            {item.status}                   
                     </span>
                   )}
-                  Â  Â  Â  Â  Â  Â  Â  Â 
+                                 
                 </article>
               ))}
-              Â  Â  Â  Â  Â  Â 
+                         
             </div>
           ) : (
             <div className="home-empty">
-              Â  Â  Â  Â  Â  Â  Â  <strong>à¸§à¸±à¸™à¸™à¸µà¹‰à¸¢à¸±à¸‡à¹„à¸¡à¹ˆà¸¡à¸µà¸•à¸²à¸£à¸²à¸‡</strong>Â  Â  Â  Â  Â  Â  Â 
-              <span>à¹„à¸›à¸—à¸µà¹ˆà¸«à¸™à¹‰à¸² Schedule à¹€à¸žà¸·à¹ˆà¸­à¸ªà¸£à¹‰à¸²à¸‡à¸•à¸²à¸£à¸²à¸‡à¸«à¸£à¸·à¸­à¹€à¸žà¸´à¹ˆà¸¡à¸Šà¹ˆà¸§à¸‡à¹€à¸£à¸µà¸¢à¸™à¹€à¸­à¸‡</span>
-              Â  Â  Â  Â  Â  Â 
+                            <strong>วันนี้ยังไม่มีตาราง</strong>             
+              <span>ไปที่หน้า Schedule เพื่อสร้างตารางหรือเพิ่มช่วงเรียนเอง</span>
+                         
             </div>
           )}
-          Â  Â  Â  Â 
+                 
         </section>
         {isAddModalOpen && (
           <div
@@ -685,32 +680,32 @@ export default function HomeDashboard({ username }: { username: string }) {
               }
             }}
           >
-            Â  Â  Â  Â  Â  Â 
+                       
             <form
               className="mock-form-card"
               onSubmit={addActivity}
               onMouseDown={(event) => event.stopPropagation()}
             >
-              Â  Â  Â  Â  Â  Â  Â 
+                           
               <div id="add-schedule-title" className="mock-form-header">
-                à¹€à¸žà¸´à¹ˆà¸¡à¸•à¸²à¸£à¸²à¸‡à¹ƒà¸«à¸¡à¹ˆ
+                เพิ่มตารางใหม่
               </div>
-              Â  Â  Â  Â  Â  Â  Â 
+                           
               <label className="field-block">
-                Â  Â  Â  Â  Â  Â  Â  Â  <span>à¸Šà¸·à¹ˆà¸­à¸à¸´à¸ˆà¸à¸£à¸£à¸¡</span>Â  Â  Â  Â  Â  Â  Â  Â 
+                                <span>ชื่อกิจกรรม</span>               
                 <input
                   value={activityTitle}
                   onChange={(event) => setActivityTitle(event.target.value)}
                   maxLength={100}
                   required
                 />
-                Â  Â  Â  Â  Â  Â  Â 
+                             
               </label>
-              Â  Â  Â  Â  Â  Â  Â 
+                           
               <div className="two-column">
-                Â  Â  Â  Â  Â  Â  Â  Â 
+                               
                 <label className="field-block">
-                  Â  Â  Â  Â  Â  Â  Â  Â  Â  <span>à¸›à¸£à¸°à¹€à¸ à¸—à¸à¸´à¸ˆà¸à¸£à¸£à¸¡</span>Â  Â  Â  Â  Â  Â  Â  Â  Â 
+                                    <span>ประเภทกิจกรรม</span>                 
                   <select
                     value={activityType}
                     onChange={(event) =>
@@ -722,11 +717,11 @@ export default function HomeDashboard({ username }: { username: string }) {
                     }
                     required
                   >
-                    Â  Â  Â  Â  Â  Â  Â  Â  Â  Â 
+                                       
                     <option value="" disabled>
-                      à¹€à¸¥à¸·à¸­à¸à¸›à¸£à¸°à¹€à¸ à¸—
+                      เลือกประเภท
                     </option>
-                    Â  Â  Â  Â  Â  Â  Â  Â  Â  Â 
+                                       
                     {Object.entries(activityTypeLabels).map(
                       ([value, label]) => (
                         <option key={value} value={value}>
@@ -734,53 +729,53 @@ export default function HomeDashboard({ username }: { username: string }) {
                         </option>
                       ),
                     )}
-                    Â  Â  Â  Â  Â  Â  Â  Â  Â 
+                                     
                   </select>
-                  Â  Â  Â  Â  Â  Â  Â  Â 
+                                 
                 </label>
-                Â  Â  Â  Â  Â  Â  Â  Â 
+                               
                 <label className="field-block">
-                  Â  Â  Â  Â  Â  Â  Â  Â  Â  <span>à¸£à¸²à¸¢à¸§à¸´à¸Šà¸²</span>Â  Â  Â  Â  Â  Â  Â  Â  Â 
+                                    <span>รายวิชา</span>                 
                   <select
                     value={courseKey}
                     onChange={(event) => setCourseKey(event.target.value)}
                   >
-                    Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  <option value="">à¹„à¸¡à¹ˆà¸œà¸¹à¸à¸§à¸´à¸Šà¸²</option>Â  Â 
-                    Â  Â  Â  Â  Â  Â  Â  Â 
+                                        <option value="">ไม่ผูกวิชา</option>   
+                                   
                     {selectedCourses.map((course) => (
                       <option key={course.key} value={course.key}>
                         {course.label}
                       </option>
                     ))}
-                    Â  Â  Â  Â  Â  Â  Â  Â  Â 
+                                     
                   </select>
-                  Â  Â  Â  Â  Â  Â  Â  Â 
+                                 
                 </label>
-                Â  Â  Â  Â  Â  Â  Â  Â 
+                               
                 
-                Â  Â  Â  Â  Â  Â  Â 
+                             
               </div>
-              Â  Â  Â  Â  Â  Â  Â 
+                           
               {selectedCourses.length === 0 && (
                 <small className="mock-form-hint">
-                  à¸¢à¸±à¸‡à¹„à¸¡à¹ˆà¸¡à¸µà¸£à¸²à¸¢à¸§à¸´à¸Šà¸²à¹ƒà¸™à¸à¸²à¸™à¸‚à¹‰à¸­à¸¡à¸¹à¸¥ à¸ªà¸²à¸¡à¸²à¸£à¸–à¸šà¸±à¸™à¸—à¸¶à¸à¹‚à¸”à¸¢à¹„à¸¡à¹ˆà¸œà¸¹à¸à¸§à¸´à¸Šà¸²à¹„à¸”à¹‰
+                  ยังไม่มีรายวิชาในฐานข้อมูล สามารถบันทึกโดยไม่ผูกวิชาได้
                 </small>
               )}
-              Â  Â  Â  Â  Â  Â  Â 
+                           
               <label className="field-block">
-                Â  Â  Â  Â  Â  Â  Â  Â  <span>à¸£à¸²à¸¢à¸¥à¸°à¹€à¸­à¸µà¸¢à¸”à¸à¸´à¸ˆà¸à¸£à¸£à¸¡</span>Â  Â  Â  Â  Â  Â  Â  Â 
+                                <span>รายละเอียดกิจกรรม</span>               
                 <textarea
                   rows={3}
                   maxLength={1000}
                   value={details}
                   onChange={(event) => setDetails(event.target.value)}
                 />
-                Â  Â  Â  Â  Â  Â  Â 
+                             
               </label>
-              Â  Â  Â  Â  Â  Â  Â 
+                           
               <label className="field-block">
-                Â  Â  Â  Â  Â  Â  Â  Â  <span>à¹€à¸§à¸¥à¸²à¸—à¸µà¹ˆà¹ƒà¸Šà¹‰à¹ƒà¸™à¸à¸²à¸£à¸—à¸³à¸à¸´à¸ˆà¸à¸£à¸£à¸¡ (à¸Šà¸±à¹ˆà¸§à¹‚à¸¡à¸‡)</span>Â 
-                Â  Â  Â  Â  Â  Â  Â 
+                                <span>เวลาที่ใช้ในการทำกิจกรรม (ชั่วโมง)</span> 
+                             
                 <input
                   type="number"
                   min="0.25"
@@ -790,13 +785,13 @@ export default function HomeDashboard({ username }: { username: string }) {
                   onChange={(event) => setDurationHours(event.target.value)}
                   required
                 />
-                Â  Â  Â  Â  Â  Â  Â 
+                             
               </label>
-              Â  Â  Â  Â  Â  Â  Â 
+                           
               <div className="two-column">
-                Â  Â  Â  Â  Â  Â  Â  Â 
+                               
                 <label className="field-block">
-                  Â  Â  Â  Â  Â  Â  Â  Â  Â  <span>à¸§à¸±à¸™à¸—à¸µà¹ˆà¹€à¸£à¸´à¹ˆà¸¡</span>Â  Â  Â  Â  Â  Â  Â  Â  Â 
+                                    <span>วันที่เริ่ม</span>                 
                   <input
                     type="date"
                     lang="en-GB"
@@ -805,11 +800,11 @@ export default function HomeDashboard({ username }: { username: string }) {
                       setStartDate(toDisplayDate(event.target.value))
                     }
                   />
-                  Â  Â  Â  Â  Â  Â  Â  Â 
+                                 
                 </label>
-                Â  Â  Â  Â  Â  Â  Â  Â 
+                               
                 <label className="field-block">
-                  Â  Â  Â  Â  Â  Â  Â  Â  Â  <span>à¸§à¸±à¸™à¸—à¸µà¹ˆà¸ªà¸´à¹‰à¸™à¸ªà¸¸à¸”</span>Â  Â  Â  Â  Â  Â  Â  Â  Â 
+                                    <span>วันที่สิ้นสุด</span>                 
                   <input
                     type="date"
                     lang="en-GB"
@@ -818,67 +813,67 @@ export default function HomeDashboard({ username }: { username: string }) {
                       setEndDate(toDisplayDate(event.target.value))
                     }
                   />
-                  Â  Â  Â  Â  Â  Â  Â  Â 
+                                 
                 </label>
-                Â  Â  Â  Â  Â  Â  Â 
+                             
               </div>
-              Â  Â  Â  Â  Â  Â  Â 
+                           
               <div className="two-column two-column-last">
-                Â  Â  Â  Â  Â  Â  Â  Â 
+                               
                 <label className="field-block">
-                  Â  Â  Â  Â  Â  Â  Â  Â  Â  <span>à¹€à¸§à¸¥à¸²à¹€à¸£à¸´à¹ˆà¸¡</span>Â  Â  Â  Â  Â  Â  Â  Â  Â 
+                                    <span>เวลาเริ่ม</span>                 
                   <input
                     type="time"
                     value={startTime}
                     onChange={(event) => setStartTime(event.target.value)}
                   />
-                  Â  Â  Â  Â  Â  Â  Â  Â 
+                                 
                 </label>
-                Â  Â  Â  Â  Â  Â  Â  Â 
+                               
                 <label className="field-block">
-                  Â  Â  Â  Â  Â  Â  Â  Â  Â  <span>à¹€à¸§à¸¥à¸²à¸ªà¸´à¹‰à¸™à¸ªà¸¸à¸”</span>Â  Â  Â  Â  Â  Â  Â  Â  Â 
+                                    <span>เวลาสิ้นสุด</span>                 
                   <input
                     type="time"
                     value={endTime}
                     onChange={(event) => setEndTime(event.target.value)}
                   />
-                  Â  Â  Â  Â  Â  Â  Â  Â 
+                                 
                 </label>
-                Â  Â  Â  Â  Â  Â  Â 
+                             
               </div>
-              Â  Â  Â  Â  Â  Â  Â 
+                           
               {formError && (
                 <p className="dashboard-error" role="alert">
                   {formError}
                 </p>
               )}
-              Â  Â  Â  Â  Â  Â  Â 
+                           
               <div className="mock-form-actions">
-                Â  Â  Â  Â  Â  Â  Â  Â 
+                               
                 <button
                   type="button"
                   className="secondary-btn"
                   onClick={cancelNewActivity}
                 >
-                  à¸¢à¸à¹€à¸¥à¸´à¸
+                  ยกเลิก
                 </button>
-                Â  Â  Â  Â  Â  Â  Â  Â 
+                               
                 <button
                   type="submit"
                   className="primary-btn"
                   disabled={isSaving || isLoading || categories.length === 0}
                 >
-                  Â  Â  Â  Â  Â  Â  Â  Â  Â  {isSaving ? "à¸à¸³à¸¥à¸±à¸‡à¸šà¸±à¸™à¸—à¸¶à¸..." : "à¹€à¸žà¸´à¹ˆà¸¡à¸•à¸²à¸£à¸²à¸‡"}
-                  Â  Â  Â  Â  Â  Â  Â  Â 
+                                    {isSaving ? "กำลังบันทึก..." : "เพิ่มตาราง"}
+                                 
                 </button>
-                Â  Â  Â  Â  Â  Â  Â 
+                             
               </div>
-              Â  Â  Â  Â  Â  Â 
+                         
             </form>
-            Â  Â  Â  Â  Â 
+                     
           </div>
         )}
-        Â  Â  Â  Â 
+               
         {lecturePreview && (
           <div
             className="mock-note-overlay"
@@ -899,13 +894,13 @@ export default function HomeDashboard({ username }: { username: string }) {
                   type="button"
                   className="close-note"
                   onClick={() => setLecturePreview(null)}
-                  aria-label="à¸›à¸´à¸”"
+                  aria-label="ปิด"
                 >
-                  Ã—
+                  ×
                 </button>
               </div>
               <p className="session-course">
-                {lecturePreview.title} Â· {lecturePreview.time}
+                {lecturePreview.title} · {lecturePreview.time}
               </p>
               <div className="home-lecture-content">
                 {lecturePreview.content}
@@ -916,7 +911,7 @@ export default function HomeDashboard({ username }: { username: string }) {
                   className="secondary-btn"
                   onClick={() => setLecturePreview(null)}
                 >
-                  à¸›à¸´à¸”
+                  ปิด
                 </button>
               </div>
             </section>
@@ -928,31 +923,26 @@ export default function HomeDashboard({ username }: { username: string }) {
             role="dialog"
             aria-modal="true"
             aria-labelledby="future-note-title"
-            onMouseDown={(event) => {
-              if (event.target === event.currentTarget && !isSavingFutureNote) {
-                setFutureNoteActivity(null);
-              }
-            }}
           >
-            Â  Â  Â  Â  Â  Â 
+                       
             <form className="mock-note-modal" onSubmit={saveFutureNote}>
-              Â  Â  Â  Â  Â  Â  Â 
+                           
               <div className="note-header">
-                Â  Â  Â  Â  Â  Â  Â  Â  <h3 id="future-note-title">Future Note</h3>Â  Â  Â 
-                Â  Â  Â  Â  Â 
+                                <h3 id="future-note-title">Future Note</h3>     
+                         
                 <button
                   type="button"
                   className="close-note"
                   onClick={() => setFutureNoteActivity(null)}
-                  aria-label="à¸›à¸´à¸”"
+                  aria-label="ปิด"
                 >
-                  Ã—
+                  ×
                 </button>
-                Â  Â  Â  Â  Â  Â  Â 
+                             
               </div>
-              Â  Â  Â  Â  Â  Â  Â 
-              <p className="session-course">{futureNoteActivity.title}</p>Â  Â  Â 
-              Â  Â  Â  Â 
+                           
+              <p className="session-course">{futureNoteActivity.title}</p>     
+                     
               <textarea
                 rows={6}
                 maxLength={10000}
@@ -960,40 +950,40 @@ export default function HomeDashboard({ username }: { username: string }) {
                 onChange={(event) => setFutureNoteDraft(event.target.value)}
                 aria-label="Future Note"
               />
-              Â  Â  Â  Â  Â  Â  Â 
+                           
               {futureNoteError && (
                 <p className="dashboard-error" role="alert">
                   {futureNoteError}
                 </p>
               )}
-              Â  Â  Â  Â  Â  Â  Â 
+                           
               <div className="note-actions">
-                Â  Â  Â  Â  Â  Â  Â  Â 
+                               
                 <button
                   type="button"
                   className="secondary-btn"
                   onClick={() => setFutureNoteActivity(null)}
                 >
-                  à¸¢à¸à¹€à¸¥à¸´à¸
+                  ยกเลิก
                 </button>
-                Â  Â  Â  Â  Â  Â  Â  Â 
+                               
                 <button
                   type="submit"
                   className="primary-btn"
                   disabled={isSavingFutureNote}
                 >
-                  {isSavingFutureNote ? "à¸à¸³à¸¥à¸±à¸‡à¸šà¸±à¸™à¸—à¸¶à¸..." : "à¸šà¸±à¸™à¸—à¸¶à¸"}
+                  {isSavingFutureNote ? "กำลังบันทึก..." : "บันทึก"}
                 </button>
-                Â  Â  Â  Â  Â  Â  Â 
+                             
               </div>
-              Â  Â  Â  Â  Â  Â 
+                         
             </form>
-            Â  Â  Â  Â  Â 
+                     
           </div>
         )}
-        Â  Â  Â 
+             
       </div>
-      Â  Â 
+         
     </main>
   );
 }

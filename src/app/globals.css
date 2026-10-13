@@ -1102,6 +1102,7 @@ select {
 .home-today-row > .home-today-main strong {
   grid-column: 1;
   justify-self: start;
+  padding-left: 6px;
   text-align: left;
   min-width: 0;
   max-width: none;
